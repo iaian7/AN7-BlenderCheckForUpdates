@@ -1,8 +1,8 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 0, 1),
-	"blender": (3, 3, 0),
+	"version": (0, 1, 0),
+	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
 	"warning": "inexperienced developer, use at your own risk",
@@ -12,7 +12,7 @@ bl_info = {
 
 import bpy
 from bpy.app.handlers import persistent
-import urllib.request
+import requests
 import re
 
 ###########################################################################
@@ -34,11 +34,13 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 		path = "http://download.blender.org/release/Blender" + base + "/"
 		type = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
 		
-		# Get raw download page
-		fp = urllib.request.urlopen(path)
-		mybytes = fp.read()
-		page = mybytes.decode("utf8")
-		fp.close()
+		# Get download page content
+		r = requests.get(path)
+		if r.status_code == 200:
+			page = r.text
+		else:
+			print('AN7 Check for Updates: URL request failed to get the Blender download page')
+			return {'FINISHED'}
 		
 		# Check for newest point release
 		pattern = r'blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.")
@@ -71,6 +73,7 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 
 def AN7_update_available_popup(self, context):
 	layout = self.layout
+	layout.label(text='Download patch:')
 	patchLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link
 	patchName = patchLink.split('/')[-1]
 	op = layout.operator('wm.url_open', text=patchName, icon='URL')
