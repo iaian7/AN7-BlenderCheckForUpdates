@@ -2,6 +2,8 @@
 
 Check for Blender patch updates from the Help menu and automatically on startup.
 
+![screenshot of the Blender help menu and popup panel showing an available update and download link](images/menu.png)
+
 ## Installation and Usage
 
  - Download the .py add-on file
@@ -11,6 +13,10 @@ Check for Blender patch updates from the Help menu and automatically on startup.
 
 ![screenshot of the plugin settings as seen in the Blender preferences add-ons tab interface](images/preferences.png)
 
-Works in Blender 2.83, 2.93, and 3.3 for MacOS Intel, other versions and platforms probably work but have not be tested.
+If `Automatically Check for Updates` is enabled and a new patch is found on startup, an update button will appear in the main menu.
 
-When automatically checking for updates on startup, Blender will try to download an available update even when you click away from the update panel if the splash screen is also enabled and still on screen. Normally, simply moving the mouse away from the popup would dismiss it, but there seems to be a conflict with the UI panels. Pressing the `escape` key will close the popups without downloading.
+![screenshot of the update button in the Blender main menu](images/update.png)
+
+Click this button to open the update popup with a download link (it'll download using your default browser), or access the same popup window at any time from the `Help` menu (this is an easy way to confirm you're running the latest available version if Blender hasn't been restarted in a while).
+
+Works in Blender 2.83, 2.93, and 3.3 for MacOS Intel, other versions and platforms should work but have not be tested.
