@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 4, 0),
+	"version": (0, 4, 2),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -21,7 +21,7 @@ import re
 class AN7_Check_For_Updates(bpy.types.Operator):
 	bl_idname = "an7checkforupdates.check"
 	bl_label = "Check for Updates"
-	bl_description = "Check for updates on the Blender.org website"
+	bl_description = "Check for updates from https://download.blender.org/release/ (this may take a few seconds)"
 	
 	mode: bpy.props.IntProperty() # 0 == only check, 1 == check and popup, 2 == only popup
 	
@@ -31,10 +31,11 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			if r.status_code == 200:
 				return r.text
 			else:
-				print('Error in AN7 Check for Updates: URL request failed to get the Blender download page')
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message = 'Failed to get Blender website, check network status'
+				print('Error in AN7 Check for Updates: URL request failed to get Blender website, check network status')
 				return {'FINISHED'}
 		except Exception as exc:
-			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available versions")
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to get Blender website")
 			return False
 	
 	def findVersions(self):
@@ -52,10 +53,11 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			else:
 				return False
 		except Exception as exc:
-			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available versions")
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message = 'Failed to get Blender version list, check network status'
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to get Blender version list, check network status")
 			return False
 	
-	def findPatchDownload(self, version, type):
+	def findDownload(self, version, type):
 		try:
 			# Version must be a three part tuple for correct comparison
 			# Type must be a valid Blender OS format
@@ -91,10 +93,14 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			else:
 				return False
 		except Exception as exc:
-			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available patch download")
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message = 'Failed to get Blender download list, check network status'
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to get Blender download list, check network status")
 			return False
 	
 	def execute(self, context):
+		# Reset error message
+		bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message = ''
+		
 		# Get current version
 		version = bpy.app.version
 		
@@ -109,40 +115,41 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 		# Blender installation type
 		type = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
 		
-		# Get available major.minor versions
-		available = self.findVersions()
-		
 		# Check for new patch update
-		patch = self.findPatchDownload(version, type)
+		patch = self.findDownload(version, type)
 		if patch is not False and patch[0] > version:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = True
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version = '.'.join(map(str, patch[0]))
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link = patch[1]
 		else:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = False
+
+		# Get available major.minor versions
+		available = self.findVersions()
 		
-		# Check for new minor update
-		newMinor = [x for x in reversed(available) if str(x).startswith(str(version[0]) + '.')] # Find latest minor version
-		newMinor = available[-1] if len(newMinor) == 0 else newMinor[0] # Catch error when minor version doesn't exist
-		newMinor = tuple(map(int, (newMinor + '.0').split('.'))) # Convert common version number to tuple with third element
-		minor = self.findPatchDownload(newMinor, type)
-		if minor is not False and minor[0] > version:
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link = minor[1]
-		else:
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
-		
-		# Check for new major update
-		newMajor = available[-1] # Find latest version
-		newMajor = tuple(map(int, (newMajor + '.0').split('.'))) # Convert common version number to tuple with third element
-		major = self.findPatchDownload(newMajor, type)
-		if major is not False and major[0] > version and minor[0] != major[0]:
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link = major[1]
-		else:
-			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
+		if available is not False:
+			# Check for new minor update
+			newMinor = [x for x in reversed(available) if str(x).startswith(str(version[0]) + '.')] # Find latest minor version
+			newMinor = available[-1] if len(newMinor) == 0 else newMinor[0] # Catch error when minor version doesn't exist
+			newMinor = tuple(map(int, (newMinor + '.0').split('.'))) # Convert common version number to tuple with third element
+			minor = self.findDownload(newMinor, type)
+			if minor is not False and minor[0] > version:
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link = minor[1]
+			else:
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
+			
+			# Check for new major update
+			newMajor = available[-1] # Find latest version
+			newMajor = tuple(map(int, (newMajor + '.0').split('.'))) # Convert common version number to tuple with third element
+			major = self.findDownload(newMajor, type)
+			if major is not False and major[0] > version and minor[0] != major[0]:
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link = major[1]
+			else:
+				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
 		
 		# Show popup with results
 		if (self.mode == 1):
@@ -157,30 +164,33 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 
 def AN7_update_popup(self, context):
 	layout = self.layout
-	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available:
-		layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version + ' patch available')
-		patchLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link
-		patchName = patchLink.split('/')[-1]
-		op = layout.operator('wm.url_open', text=patchName, icon='URL')
-		op.url = patchLink
-	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
+	if len(bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message) > 0:
+		layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message)
+	else:
 		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available:
-			layout.separator()
-		layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version + ' minor upgrade')
-		minorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link
-		minorName = minorLink.split('/')[-1]
-		op = layout.operator('wm.url_open', text=minorName, icon='URL')
-		op.url = minorLink
-	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available:
-		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
-			layout.separator()
-		layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version + ' major update')
-		majorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link
-		majorName = majorLink.split('/')[-1]
-		op = layout.operator('wm.url_open', text=majorName, icon='URL')
-		op.url = majorLink
-	if not (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available):
-		layout.label(text="You are running the latest public Blender release")
+			layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version + ' patch available')
+			patchLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link
+			patchName = patchLink.split('/')[-1]
+			op = layout.operator('wm.url_open', text=patchName, icon='URL')
+			op.url = patchLink
+		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
+			if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available:
+				layout.separator()
+			layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version + ' minor upgrade')
+			minorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link
+			minorName = minorLink.split('/')[-1]
+			op = layout.operator('wm.url_open', text=minorName, icon='URL')
+			op.url = minorLink
+		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available:
+			if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
+				layout.separator()
+			layout.label(text=bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version + ' major update')
+			majorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link
+			majorName = majorLink.split('/')[-1]
+			op = layout.operator('wm.url_open', text=majorName, icon='URL')
+			op.url = majorLink
+		if not (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available):
+			layout.label(text="You are running the latest public Blender release")
 
 
 
@@ -250,6 +260,14 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 			],
 		default='-macos-x64.dmg'
 	)
+	
+	# Error tracking system
+	error_message: bpy.props.StringProperty(
+		name='Error Message',
+		description='Error Message',
+		default=""
+	)
+	
 	# Patch updates
 	patch_available: bpy.props.BoolProperty(
 		name='Patch available',
@@ -266,6 +284,7 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 		description='Updated version number',
 		default=''
 	)
+	
 	# Minor updates
 	minor_available: bpy.props.BoolProperty(
 		name='Patch available',
@@ -282,6 +301,7 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 		description='Updated version number',
 		default=""
 	)
+	
 	# Major updates
 	major_available: bpy.props.BoolProperty(
 		name='Patch available',
