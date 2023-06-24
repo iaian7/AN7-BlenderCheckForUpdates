@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 5, 0),
+	"version": (0, 5, 1),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -128,6 +128,9 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 		if self.mode == 0 and bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check != 'all':
 			return {'FINISHED'}
 		
+		# Set full check to true (even if it fails, we've tried)
+		bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.full_check = True
+		
 		# Get available major.minor versions
 		available = self.findVersions()
 		
@@ -197,6 +200,10 @@ def AN7_update_popup(self, context):
 			op.url = majorLink
 		if not (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available):
 			layout.label(text="You are running the latest public Blender release")
+		elif not bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.full_check:
+			layout.separator()
+			op = layout.operator('an7checkforupdates.check', text='Check for All Updates…', icon='FILE_REFRESH')
+			op.mode=1
 
 
 
@@ -206,6 +213,14 @@ def AN7_update_popup(self, context):
 @persistent
 def an7_check_for_updates_on_load(self, context):
 	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check != 'none':
+		# Reset toggles
+		bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = False
+		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check == 'all':
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
+		else:
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.full_check = False
+		# Check for updates
 		bpy.ops.an7checkforupdates.check("EXEC_DEFAULT", mode=0)
 
 # Show main menu button if updates are available
@@ -263,11 +278,16 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 		default='patch'
 	)
 	
-	# Error tracking system
+	# Error and status tracking system
 	error_message: bpy.props.StringProperty(
 		name='Error Message',
 		description='Error Message',
 		default=""
+	)
+	full_check: bpy.props.BoolProperty(
+		name='All Upgrades Checked',
+		description='True if a full upgrade check has been performed',
+		default=False
 	)
 	
 	# Patch updates
