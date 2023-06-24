@@ -1,9 +1,9 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 4, 2),
+	"version": (0, 5, 0),
 	"blender": (2, 83, 0),
-	"location": "Help > Check for Updates",
+	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
 	"warning": "inexperienced developer, use at your own risk",
 	"wiki_url": "",
@@ -123,7 +123,11 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link = patch[1]
 		else:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = False
-
+		
+		# Skip checking for major and minor versions if this is during startup and "All Updates" is not enabled
+		if self.mode == 0 and bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check != 'all':
+			return {'FINISHED'}
+		
 		# Get available major.minor versions
 		available = self.findVersions()
 		
@@ -132,24 +136,26 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			newMinor = [x for x in reversed(available) if str(x).startswith(str(version[0]) + '.')] # Find latest minor version
 			newMinor = available[-1] if len(newMinor) == 0 else newMinor[0] # Catch error when minor version doesn't exist
 			newMinor = tuple(map(int, (newMinor + '.0').split('.'))) # Convert common version number to tuple with third element
-			minor = self.findDownload(newMinor, type)
-			if minor is not False and minor[0] > version:
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link = minor[1]
-			else:
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
+			if newMinor > version: # Skip the network call if we already know we don't need it
+				minor = self.findDownload(newMinor, type)
+				if minor is not False and minor[0] > version:
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link = minor[1]
+				else:
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
 			
 			# Check for new major update
 			newMajor = available[-1] # Find latest version
 			newMajor = tuple(map(int, (newMajor + '.0').split('.'))) # Convert common version number to tuple with third element
-			major = self.findDownload(newMajor, type)
-			if major is not False and major[0] > version and minor[0] != major[0]:
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link = major[1]
-			else:
-				bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
+			if newMajor > version: # Skip the network call if we already know we don't need it
+				major = self.findDownload(newMajor, type)
+				if major is not False and major[0] > version and minor[0] != major[0]:
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link = major[1]
+				else:
+					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
 		
 		# Show popup with results
 		if (self.mode == 1):
@@ -199,7 +205,7 @@ def AN7_update_popup(self, context):
 
 @persistent
 def an7_check_for_updates_on_load(self, context):
-	if (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check):
+	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.auto_check != 'none':
 		bpy.ops.an7checkforupdates.check("EXEC_DEFAULT", mode=0)
 
 # Show main menu button if updates are available
@@ -231,22 +237,8 @@ def an7_check_for_updates_help_menu(self, context):
 
 class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 	bl_idname = __name__
-
-	auto_check: bpy.props.BoolProperty(
-		name='Automatically Check for Updates',
-		description='Check for new updates every time Blender starts up',
-		default=True
-	)
-#	update_type: bpy.props.EnumProperty(
-#		name='Update Type',
-#		description='Choose the type of Blender download that should be checked for',
-#		items=[
-#			('patch', 'Patch Updates (' + re.sub(r'\.\d+$', ".x", bpy.app.version_string) + ')', 'Semantic versioning patch updates'),
-#			('minor', 'Minor and Patch Updates (' + re.sub(r'\.\d+', ".x", bpy.app.version_string) + ')', 'Semantic versioning minor updates'),
-#			('major', 'Major, Minor, and Patch Updates (x.x.x)', 'Semantic versioning major updates')
-#			],
-#		default='patch'
-#	)
+	
+	# Global Settings
 	download_format: bpy.props.EnumProperty(
 		name='Download Format',
 		description='Choose the type of Blender download that should be suggested',
@@ -259,6 +251,16 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 			('-windows-x64.zip', 'Windows ZIP', 'Microsoft Windows x64 zip file')
 			],
 		default='-macos-x64.dmg'
+	)
+	auto_check: bpy.props.EnumProperty(
+		name='Automatically Check',
+		description='Choose the type of Blender download that should be checked for',
+		items=[
+			('none', 'None', 'Do not automatically check for updates on launch'),
+			('patch', 'Patch Updates', 'Check for patch updates on launch'),
+			('all', 'All Updates (slow)', 'Check for major, minor, and patch updates on launch')
+		],
+		default='patch'
 	)
 	
 	# Error tracking system
@@ -322,9 +324,14 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 	# Plugin preferences rendering
 	def draw(self, context):
 		layout = self.layout
-		layout.prop(self, "auto_check")
-#		layout.prop(self, "update_type")
 		layout.prop(self, "download_format")
+		layout.prop(self, "auto_check")
+		box = layout.box()
+		box.label(text='Warning: Blender will freeze for several seconds when checking for updates.')
+		col = box.column(align=True)
+		col.label(text='You can improve app launch speed by choosing "Patch Updates" or "None"')
+#		col.label(text='then using the "Help" menu to check for all updates only when needed.')
+		col.label(text='then checking for all upgrades from the "Help" menu only when needed.')
 
 
 
