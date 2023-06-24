@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 3, 2),
+	"version": (0, 4, 0),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -66,8 +66,16 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			page = self.getPageData(path)
 			
 			# Check for newest matching download in the HTML source
-			pattern = r'blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.")
+			pattern = r'(?<=")blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.") + '(?=")'
 			downloads = re.findall(pattern, page, re.M)
+			
+			# If no downloads were found, check again with just the file extension instead of the full 
+			if len(downloads) == 0:
+				newType = re.sub(r'^[-\w]+', ".+?", type.replace(".", "\."))
+				pattern = r'(?<=")blender-' + base.replace(".", "\.") + '\.\d+' + newType + '(?=")'
+				downloads = re.findall(pattern, page, re.M)
+			
+			# If still no downloads were found, return false
 			if len(downloads) > 0:
 				download = downloads[-1]
 			else:
