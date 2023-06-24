@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 2, 0),
+	"version": (0, 3, 0),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -25,49 +25,148 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 	
 	mode: bpy.props.IntProperty() # 0 == only check, 1 == check and popup, 2 == only popup
 	
+	def getPageData(self, path):
+		try:
+			r = requests.get(path)
+			if r.status_code == 200:
+				return r.text
+			else:
+				print('Error in AN7 Check for Updates: URL request failed to get the Blender download page')
+				return {'FINISHED'}
+		except Exception as exc:
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available versions")
+			return False
+	
+	def findVersions(self):
+		try:
+			path = "http://download.blender.org/release/"
+			
+			# Get download page data
+			page = self.getPageData(path)
+			
+			# Find versions
+			versions = re.findall(r'(?<=Blender)\d+.\d+', page, re.M)
+			
+			if (versions):
+				return versions
+			else:
+				return False
+		except Exception as exc:
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available versions")
+			return False
+	
+	def findPatchDownload(self, version, type):
+		try:
+			# Version must be a three part tuple for correct comparison
+			# Type must be a valid Blender OS format
+			base = str(version[0]) + "." + str(version[1])
+			path = "http://download.blender.org/release/Blender" + base + "/"
+			
+			# Get download page data
+			page = self.getPageData(path)
+			
+			# Check for newest matching download in the HTML source
+			pattern = r'blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.")
+			downloads = re.findall(pattern, page, re.M)
+			if len(downloads) > 0:
+				download = downloads[-1]
+			else:
+				return False
+			
+			# Extract new version tuple
+			pattern = base.replace(".", "\.") + '\.\d+'
+			newVersion = re.search(pattern, download, re.M)
+			newVersion = tuple(map(int, newVersion.group().split('.')))
+			
+			if (newVersion > version):
+				return [newVersion, path + download]
+			else:
+				return False
+		except Exception as exc:
+			print(str(exc) + " | Error in AN7 Check for Updates: failed to find available patch download")
+			return False
+	
 	def execute(self, context):
-		# Bypass checking for new updates, just show the popup with existing global variable values
-		if (self.mode == 2):
-			context.window_manager.popup_menu(AN7_update_popup, title='Update', icon='FILE_REFRESH')
-			return {'FINISHED'}
-		
 		# Get current version
 		version = bpy.app.version
 		
-		# Set variables
-		base = str(version[0]) + "." + str(version[1])
-		path = "http://download.blender.org/release/Blender" + base + "/"
-		type = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
+		# Create popup title text
+		popup_title = 'Update Blender ' + '.'.join(map(str, version))
 		
-		# Get download page content
-		r = requests.get(path)
-		if r.status_code == 200:
-			page = r.text
-		else:
-			print('AN7 Check for Updates: URL request failed to get the Blender download page')
+		# Bypass checking for new updates, just show the popup with existing global variable values
+		if (self.mode == 2):
+			context.window_manager.popup_menu(AN7_update_popup, title=popup_title, icon='FILE_REFRESH')
 			return {'FINISHED'}
 		
-		# Check for newest point release
-		pattern = r'blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.")
-		downloads = re.findall(pattern, page, re.M)
-		download = downloads[-1]
+		# Blender installation type
+		type = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
 		
-		# Extract new version tuple
-		pattern = base.replace(".", "\.") + '\.\d+'
-		newVersion = re.search(pattern, download, re.M)
-		newVersion = tuple(map(int, newVersion.group().split('.')))
+		# Get available major.minor versions
+		available = self.findVersions()
 		
-		# Set global properties
-		bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version = '.'.join(map(str,newVersion))
-		bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link = path + download
-		if (newVersion > version):
+		# Check for new patch update
+		patch = self.findPatchDownload(version, type)
+		if patch:
+			print('Detected patch version:')
+			print(patch[0])
+			print('')
+		if patch is not False and patch[0] > version:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = True
+#			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version = '.'.join(map(str, patch[0]))
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link = patch[1]
 		else:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = False
-	
+			print('AN7 Blender Update: no newer patch version available')
+			print('')
+			print('')
+			print('')
+		
+		# Check for new minor update
+		newMinor = [x for x in reversed(available) if str(x).startswith(str(version[0]) + '.')] # Find latest minor version
+		newMinor = available[-1] if len(newMinor) == 0 else newMinor[0] # Catch error when minor version doesn't exist
+		newMinor = tuple(map(int, (newMinor + '.0').split('.'))) # Convert common version number to tuple with third element
+		print('Looking for minor version:')
+		print(newMinor)
+		minor = self.findPatchDownload(newMinor, type)
+		if minor:
+			print('Detected minor version:')
+			print(minor[0])
+			print('')
+		if minor is not False and minor[0] > version:
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
+#			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link = minor[1]
+		else:
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = False
+			print('AN7 Blender Update: no newer minor version available')
+			print('')
+			print('')
+			print('')
+		
+		# Check for new major update
+		newMajor = available[-1] # Find latest version
+		newMajor = tuple(map(int, (newMajor + '.0').split('.'))) # Convert common version number to tuple with third element
+		print('Looking for major version:')
+		print(newMajor)
+		major = self.findPatchDownload(newMajor, type)
+		if major:
+			print('Detected major version:')
+			print(major[0])
+			print('')
+		if major is not False and major[0] > version and minor[0] != major[0]:
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
+#			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link = major[1]
+		else:
+			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = False
+			print('AN7 Blender Update: no newer major version available')
+			print('')
+			print('')
+			print('')
+		
 		# Show popup with results
 		if (self.mode == 1):
-			context.window_manager.popup_menu(AN7_update_popup, title='Update', icon='FILE_REFRESH')
+			context.window_manager.popup_menu(AN7_update_popup, title=popup_title, icon='FILE_REFRESH')
 			
 		return {'FINISHED'}
 
@@ -78,14 +177,30 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 
 def AN7_update_popup(self, context):
 	layout = self.layout
-	if (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available):
+	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available:
 		layout.label(text='New patch available:')
 		patchLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_link
 		patchName = patchLink.split('/')[-1]
 		op = layout.operator('wm.url_open', text=patchName, icon='URL')
 		op.url = patchLink
-	else:
-		layout.label(text="You are running the latest patch for this version of Blender")
+	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
+		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available:
+			layout.separator()
+		layout.label(text='New minor update available:')
+		minorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_link
+		minorName = minorLink.split('/')[-1]
+		op = layout.operator('wm.url_open', text=minorName, icon='URL')
+		op.url = minorLink
+	if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available:
+		if bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available:
+			layout.separator()
+		layout.label(text='New major update available:')
+		majorLink = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_link
+		majorName = majorLink.split('/')[-1]
+		op = layout.operator('wm.url_open', text=majorName, icon='URL')
+		op.url = majorLink
+	if not (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available):
+		layout.label(text="You are running the latest public Blender release")
 
 
 
@@ -100,7 +215,7 @@ def an7_check_for_updates_on_load(self, context):
 # Show main menu button if updates are available
 
 def an7_check_for_updates_main_menu(self, context):
-	if not (False) and (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available):
+	if not (False) and (bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available or bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available):
 		layout = self.layout
 		layout.separator()
 		op = layout.operator('an7checkforupdates.check', text='Update', icon='FILE_REFRESH')
@@ -155,52 +270,56 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 			],
 		default='-macos-x64.dmg'
 	)
+	# Patch updates
 	patch_available: bpy.props.BoolProperty(
 		name='Patch available',
 		description='Status of available patch updates',
 		default=False
 	)
-	patch_version: bpy.props.StringProperty(
-		name='Update Version',
-		description='Updated version number',
-		default=''
-	)
+#	patch_version: bpy.props.StringProperty(
+#		name='Update Version',
+#		description='Updated version number',
+#		default=''
+#	)
 	patch_link: bpy.props.StringProperty(
 		name='Update Link',
 		description='Updated version number',
 		default=''
 	)
-#	minor_available: bpy.props.BoolProperty(
-#		name='Patch available',
-#		description=' of available patch updates',
-#		default=False
-#	)
+	# Minor updates
+	minor_available: bpy.props.BoolProperty(
+		name='Patch available',
+		description=' of available patch updates',
+		default=False
+	)
 #	minor_version: bpy.props.StringProperty(
 #		name='Upgrade Version',
 #		description='Updated version number',
 #		default=bpy.app.version_string
 #	)
-#	minor_link: bpy.props.StringProperty(
-#		name='Upgrade Link',
-#		description='Updated version number',
-#		default=""
-#	)
-#	major_available: bpy.props.BoolProperty(
-#		name='Patch available',
-#		description=' of available patch updates',
-#		default=False
-#	)
+	minor_link: bpy.props.StringProperty(
+		name='Upgrade Link',
+		description='Updated version number',
+		default=""
+	)
+	# Major updates
+	major_available: bpy.props.BoolProperty(
+		name='Patch available',
+		description=' of available patch updates',
+		default=False
+	)
 #	major_version: bpy.props.StringProperty(
 #		name='Upgrade Version',
 #		description='Updated version number',
 #		default=bpy.app.version_string
 #	)
-#	major_link: bpy.props.StringProperty(
-#		name='Upgrade Link',
-#		description='Updated version number',
-#		default=""
-#	)
+	major_link: bpy.props.StringProperty(
+		name='Upgrade Link',
+		description='Updated version number',
+		default=""
+	)
 	
+	# Plugin preferences rendering
 	def draw(self, context):
 		layout = self.layout
 		layout.prop(self, "auto_check")
