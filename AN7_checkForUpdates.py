@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 5, 1),
+	"version": (0, 5, 2),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -57,11 +57,11 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			print(str(exc) + " | Error in AN7 Check for Updates: failed to get Blender version list, check network status")
 			return False
 	
-	def findDownload(self, version, type):
+	def findDownload(self, oldVersion, checkVersion, type):
 		try:
 			# Version must be a three part tuple for correct comparison
 			# Type must be a valid Blender OS format
-			base = str(version[0]) + "." + str(version[1])
+			base = str(checkVersion[0]) + "." + str(checkVersion[1])
 			path = "http://download.blender.org/release/Blender" + base + "/"
 			
 			# Get download page data
@@ -88,7 +88,7 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			newVersion = re.search(pattern, download, re.M)
 			newVersion = tuple(map(int, newVersion.group().split('.')))
 			
-			if (newVersion > version):
+			if (newVersion > oldVersion):
 				return [newVersion, path + download]
 			else:
 				return False
@@ -116,7 +116,7 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 		type = bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
 		
 		# Check for new patch update
-		patch = self.findDownload(version, type)
+		patch = self.findDownload(version, version, type)
 		if patch is not False and patch[0] > version:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_available = True
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.patch_version = '.'.join(map(str, patch[0]))
@@ -140,7 +140,7 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			newMinor = available[-1] if len(newMinor) == 0 else newMinor[0] # Catch error when minor version doesn't exist
 			newMinor = tuple(map(int, (newMinor + '.0').split('.'))) # Convert common version number to tuple with third element
 			if newMinor > version: # Skip the network call if we already know we don't need it
-				minor = self.findDownload(newMinor, type)
+				minor = self.findDownload(version, newMinor, type)
 				if minor is not False and minor[0] > version:
 					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_available = True
 					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.minor_version = '.'.join(map(str, minor[0]))
@@ -152,7 +152,7 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			newMajor = available[-1] # Find latest version
 			newMajor = tuple(map(int, (newMajor + '.0').split('.'))) # Convert common version number to tuple with third element
 			if newMajor > version: # Skip the network call if we already know we don't need it
-				major = self.findDownload(newMajor, type)
+				major = self.findDownload(version, newMajor, type)
 				if major is not False and major[0] > version and minor[0] != major[0]:
 					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_available = True
 					bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.major_version = '.'.join(map(str, major[0]))
