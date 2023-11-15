@@ -6,8 +6,8 @@ bl_info = {
 	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
 	"warning": "inexperienced developer, use at your own risk",
-	"wiki_url": "",
-	"tracker_url": "",
+	"doc_url": "https://github.com/iaian7/AN7-BlenderCheckForUpdates",
+	"tracker_url": "https://github.com/iaian7/AN7-BlenderCheckForUpdates/issues",
 	"category": "3D View"}
 
 import bpy
