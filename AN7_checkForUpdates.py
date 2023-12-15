@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 5, 3),
+	"version": (0, 5, 5),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -14,6 +14,7 @@ import bpy
 from bpy.app.handlers import persistent
 import requests
 import re
+import platform
 
 ###########################################################################
 # Main class
@@ -111,6 +112,19 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 		
 		# Blender installation type
 		type = context.preferences.addons['AN7_checkForUpdates'].preferences.download_format
+		if type == "auto":
+			system_type = platform.platform().lower()
+			if "macos" in system_type:
+				if "arm64" in system_type:
+					type = '-macos-arm64.dmg'
+				else:
+					type = '-macos-x64.dmg'
+			elif "linux" in system_type:
+				type = '-linux-x64.tar.xz'
+			else:
+#				type = '-windows-x64.msi'
+#				type = '-windows-x64.msix'
+				type = '-windows-x64.zip'
 		
 		# Check for new patch update
 		patch = self.findDownload(version, version, type)
@@ -257,6 +271,7 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 		name='Download Format',
 		description='Choose the type of Blender download that should be suggested',
 		items=[
+			('auto', 'Automatic', 'Selects a download based on the current platform data'),
 			('-linux-x64.tar.xz', 'Linux', 'Linux x64 tar.xy file'),
 			('-macos-arm64.dmg', 'MacOS ARM', 'Apple MacOS arm64 dmg file'),
 			('-macos-x64.dmg', 'MacOS Intel', 'Apple MacOS x64 dmg file'),
@@ -264,7 +279,7 @@ class AN7CheckForUpdatesPreferences(bpy.types.AddonPreferences):
 			('-windows-x64.msix', 'Windows MSIX', 'Microsoft Windows x64 msix file'),
 			('-windows-x64.zip', 'Windows ZIP', 'Microsoft Windows x64 zip file')
 			],
-		default='-macos-x64.dmg'
+		default='auto'
 	)
 	auto_check: bpy.props.EnumProperty(
 		name='Automatically Check',
