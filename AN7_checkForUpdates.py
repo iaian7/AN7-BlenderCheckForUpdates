@@ -1,7 +1,7 @@
 bl_info = {
 	"name": "AN7 Check For Updates",
 	"author": "Iaian7 - John Einselen",
-	"version": (0, 5, 5),
+	"version": (0, 5, 6),
 	"blender": (2, 83, 0),
 	"location": "Help > Check for Updates…",
 	"description": "Checks the Blender website for newer versions on startup and from the help menu",
@@ -70,25 +70,31 @@ class AN7_Check_For_Updates(bpy.types.Operator):
 			pattern = r'(?<=")blender-' + base.replace(".", "\.") + '\.\d+' + type.replace(".", "\.") + '(?=")'
 			downloads = re.findall(pattern, page, re.M)
 			
-			# If no downloads were found, check again with just the file extension instead of the full 
+			# If no downloads were found, check again with just the file extension instead of the full string (some older versions of Blender used inconsistent OS labelling)
 			if len(downloads) == 0:
 				newType = re.sub(r'^[-\w]+', ".+?", type.replace(".", "\."))
 				pattern = r'(?<=")blender-' + base.replace(".", "\.") + '\.\d+' + newType + '(?=")'
 				downloads = re.findall(pattern, page, re.M)
 			
 			# If still no downloads were found, return false
-			if len(downloads) > 0:
-				download = downloads[-1]
-			else:
+			if len(downloads) == 0:
 				return False
 			
-			# Extract new version tuple
+			# Find newest version available (iterative approach required to find versions greater than single digits, as the source list uses 1, 10, 11...2, 20, 21...3... style sorting)
+			newVersion = oldVersion
+			newDownload = ""
 			pattern = base.replace(".", "\.") + '\.\d+'
-			newVersion = re.search(pattern, download, re.M)
-			newVersion = tuple(map(int, newVersion.group().split('.')))
+			for file in downloads:
+				# Extract new version tuple
+				fileVersion = re.search(pattern, file, re.M)
+				fileVersion = tuple(map(int, fileVersion.group().split('.')))
+				# Set newest version available
+				if fileVersion > newVersion:
+					newVersion = fileVersion
+					newDownload = path + file
 			
 			if (newVersion > oldVersion):
-				return [newVersion, path + download]
+				return [newVersion, newDownload]
 			return False
 		except Exception as exc:
 			bpy.context.preferences.addons['AN7_checkForUpdates'].preferences.error_message = 'Failed to get Blender download list, check network status'
